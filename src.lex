@@ -17,6 +17,8 @@ fn noul_p(a :: Answer) -> Float {
   }
 }
 
+type Question = JudgeChoice((Str, List[(Str, Str)])) | JudgeNoul(Str) | JudgeScore((Str, List[Str]))
+
 fn make(api_key :: Str) -> Judge {
   { api_key: api_key, base_url: "https://api.typesafe.ai", model: "jev-latest", timeout_ms: 30000 }
 }
