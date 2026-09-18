@@ -27,13 +27,32 @@ import "std.str" as str
 
 import "std.list" as list
 
+import "std.int" as int
+
+import "std.float" as float
+
 import "std.map" as map
 
 import "std.http" as http
 
 import "std.bytes" as bytes
 
-import "std.json" as json
+# `lex-schema/json_value`, NOT `std.json`.
+#
+# Lex shares ONE constructor namespace across every imported module, and
+# json_value defines its own `type Json` with the same `JStr`/`JObj`/`JFloat`
+# constructors as the builtin. A package importing this one AND json_value —
+# which is most of the ecosystem — would have two types named `Json` in scope
+# and every constructor would fail to resolve. It is a type error rather than
+# a silent mis-inference, which is the safe failure, but it makes this package
+# unusable exactly where it is most wanted: that is not hypothetical, it is why
+# lex-code needed its own inline copy of this decoder instead of importing it.
+#
+# So this follows the ecosystem rather than the newer builtin. `std.json` is
+# the better primitive in isolation; compatibility wins here, and nothing in
+# this package's PUBLIC surface exposes either — `Question` and `Answer` carry
+# `Judge`-prefixed constructors of their own.
+import "lex-schema/json_value" as jv
 
 # The endpoint and credential. `base_url` is operator config and must never come
 # from anything the model or a caller's data said.
@@ -71,104 +90,89 @@ fn make(api_key :: Str) -> Judge {
 }
 
 # ── encoding ─────────────────────────────────────────────────────────────────
-fn question_json(q :: Question) -> Json {
+fn question_json(q :: Question) -> jv.Json {
   match q {
     JudgeNoul(instructions) => JObj([("type", JStr("noul")), ("instructions", JStr(instructions))]),
-    JudgeChoice(instructions, options) => JObj([("type", JStr("choice")), ("instructions", JStr(instructions)), ("criteria", JObj(list.map(options, fn (o :: (Str, Str)) -> (Str, Json) {
+    JudgeChoice(instructions, options) => JObj([("type", JStr("choice")), ("instructions", JStr(instructions)), ("criteria", JObj(list.map(options, fn (o :: (Str, Str)) -> (Str, jv.Json) {
       match o {
         (k, description) => (k, JStr(description)),
       }
     })))]),
-    JudgeScore(instructions, levels) => JObj([("type", JStr("score")), ("instructions", JStr(instructions)), ("criteria", JList(list.map(levels, fn (l :: Str) -> Json {
+    JudgeScore(instructions, levels) => JObj([("type", JStr("score")), ("instructions", JStr(instructions)), ("criteria", JList(list.map(levels, fn (l :: Str) -> jv.Json {
       JStr(l)
     })))]),
   }
 }
 
-fn request_json(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> Json {
-  JObj([("state", JStr(state)), ("model", JStr(j.model)), ("questions", JObj(list.map(questions, fn (q :: (Str, Question)) -> (Str, Json) {
+fn request_json(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> jv.Json {
+  JObj([("state", JStr(state)), ("model", JStr(j.model)), ("questions", JObj(list.map(questions, fn (q :: (Str, Question)) -> (Str, jv.Json) {
     match q {
       (id, question) => (id, question_json(question)),
     }
   })))])
 }
 
-# ── decoding ─────────────────────────────────────────────────────────────────
-fn field(j :: Json, name :: Str) -> Option[Json] {
-  match j {
-    JObj(kvs) => list.fold(kvs, None, fn (acc :: Option[Json], kv :: (Str, Json)) -> Option[Json] {
-      match acc {
-        Some(v) => Some(v),
-        None => match kv {
-          (k, v) => if k == name {
-            Some(v)
-          } else {
-            None
-          },
-        },
-      }
-    }),
-    _ => None,
+# ── decoding ────────────────────────────────────────────────────────────────
+#
+# Everything below leans on json_value's own accessors — `get_field`, `as_str`,
+# `as_int`, `as_float`, `as_obj`, `as_list` — rather than matching constructors
+# by hand. An earlier version of this file reimplemented all of them, including
+# an Int-to-Float conversion that serialised to JSON text and reparsed it when
+# `int.to_float` exists. Reimplementing a library's accessors inside a consumer
+# of that library is how two decoders drift apart.
+# A number from either JSON form. A probability of exactly 1 arrives as an Int,
+# so reading only floats would decode certainty as 0.0 and invert the answer.
+fn num(j :: jv.Json) -> Float {
+  match jv.as_float(j) {
+    Some(f) => f,
+    None => match jv.as_int(j) {
+      Some(i) => int.to_float(i),
+      None => 0.0,
+    },
   }
 }
 
-# Numbers arrive as either JSON form. A probability of exactly 1 is an Int on
-# the wire, so reading only JFloat would silently turn certainty into zero.
-fn num(j :: Json) -> Float {
-  match j {
-    JFloat(f) => f,
-    JInt(i) => int_as_float(i),
-    _ => 0.0,
-  }
-}
-
-fn int_as_float(i :: Int) -> Float {
-  match json.decode(str.concat(int_str(i), ".0")) {
-    Ok(JFloat(f)) => f,
-    _ => 0.0,
-  }
-}
-
-fn int_str(i :: Int) -> Str {
-  json.encode(JInt(i))
-}
-
-fn num_at(j :: Json, name :: Str) -> Float {
-  match field(j, name) {
+fn num_at(j :: jv.Json, name :: Str) -> Float {
+  match jv.get_field(j, name) {
     None => 0.0,
     Some(v) => num(v),
   }
 }
 
-fn str_at(j :: Json, name :: Str) -> Str {
-  match field(j, name) {
-    Some(JStr(s)) => s,
-    _ => "",
+fn str_at(j :: jv.Json, name :: Str) -> Str {
+  match jv.get_field(j, name) {
+    None => "",
+    Some(v) => match jv.as_str(v) {
+      Some(t) => t,
+      None => "",
+    },
   }
 }
 
 # `probabilities` is documented as an OBJECT keyed by option in the API
-# reference and as an ARRAY in the primitives page. Both are accepted rather
-# than guessed at, because a decoder that picks one and is wrong returns an
-# empty distribution instead of failing, and an empty distribution reads as a
-# confident zero.
-fn prob_pairs(j :: Json) -> List[(Str, Float)] {
-  match j {
-    JObj(kvs) => list.map(kvs, fn (kv :: (Str, Json)) -> (Str, Float) {
+# reference and as an ARRAY in the primitives page. The wire sends an object —
+# but both are accepted, because a decoder that picks one and is wrong returns
+# an empty distribution rather than failing, and an empty distribution reads
+# downstream as a confident zero.
+fn prob_pairs(j :: jv.Json) -> List[(Str, Float)] {
+  match jv.as_obj(j) {
+    Some(kvs) => list.map(kvs, fn (kv :: (Str, jv.Json)) -> (Str, Float) {
       match kv {
         (k, v) => (k, num(v)),
       }
     }),
-    JList(xs) => list.map(list.enumerate(xs), fn (p :: (Int, Json)) -> (Str, Float) {
-      match p {
-        (i, v) => (int_str(i), num(v)),
-      }
-    }),
-    _ => [],
+    None => match jv.as_list(j) {
+      Some(xs) => list.map(list.enumerate(xs), fn (p :: (Int, jv.Json)) -> (Str, Float) {
+        match p {
+          (i, v) => (int.to_str(i), num(v)),
+        }
+      }),
+      None => [],
+    },
   }
 }
 
-fn prob_values(j :: Json) -> List[Float] {
+fn prob_values(j :: jv.Json) -> List[Float] {
   list.map(prob_pairs(j), fn (p :: (Str, Float)) -> Float {
     match p {
       (_, v) => v,
@@ -176,14 +180,14 @@ fn prob_values(j :: Json) -> List[Float] {
   })
 }
 
-fn answer_of(id :: Str, j :: Json) -> Answer {
+fn answer_of(id :: Str, j :: jv.Json) -> Answer {
   match str_at(j, "type") {
     "noul" => JudgeNoulAnswer(num_at(j, "noul")),
-    "choice" => JudgeChoiceAnswer(str_at(j, "choice"), match field(j, "probabilities") {
+    "choice" => JudgeChoiceAnswer(str_at(j, "choice"), match jv.get_field(j, "probabilities") {
       None => [],
       Some(p) => prob_pairs(p),
     }, num_at(j, "confidence")),
-    "score" => JudgeScoreAnswer(num_at(j, "score"), match field(j, "probabilities") {
+    "score" => JudgeScoreAnswer(num_at(j, "score"), match jv.get_field(j, "probabilities") {
       None => [],
       Some(p) => prob_values(p),
     }, num_at(j, "confidence")),
@@ -191,14 +195,14 @@ fn answer_of(id :: Str, j :: Json) -> Answer {
   }
 }
 
-fn answers_of(body :: Json, questions :: List[(Str, Question)]) -> List[(Str, Answer)] {
-  let answers := match field(body, "answers") {
+fn answers_of(body :: jv.Json, questions :: List[(Str, Question)]) -> List[(Str, Answer)] {
+  let answers := match jv.get_field(body, "answers") {
     None => JObj([]),
     Some(a) => a,
   }
   list.map(questions, fn (q :: (Str, Question)) -> (Str, Answer) {
     match q {
-      (id, _) => (id, match field(answers, id) {
+      (id, _) => (id, match jv.get_field(answers, id) {
         None => JudgeMissing(id),
         Some(a) => answer_of(id, a),
       }),
@@ -238,15 +242,15 @@ fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Re
   if list.is_empty(questions) {
     Ok([])
   } else {
-    let base := { method: "POST", url: str.concat(j.base_url, "/v1/systemone"), headers: map.new(), body: Some(bytes.from_str(json.encode(request_json(j, state, questions)))), timeout_ms: Some(j.timeout_ms) }
+    let base := { method: "POST", url: str.concat(j.base_url, "/v1/systemone"), headers: map.new(), body: Some(bytes.from_str(jv.stringify(request_json(j, state, questions)))), timeout_ms: Some(j.timeout_ms) }
     let req := http.with_header(http.with_auth(http.with_timeout_ms(base, j.timeout_ms), "Bearer", j.api_key), "Content-Type", "application/json")
     match http.send(req) {
       Err(_) => Err(str.concat("could not reach ", j.base_url)),
       Ok(r) => if r.status >= 400 {
-        Err(str.join(["judgment request returned HTTP ", int_str(r.status), ": ", str.slice(redact(j, body_text(r)), 0, 300)], ""))
+        Err(str.join(["judgment request returned HTTP ", int.to_str(r.status), ": ", str.slice(redact(j, body_text(r)), 0, 300)], ""))
       } else {
-        match json.decode(redact(j, body_text(r))) {
-          Err(m) => Err(str.concat("judgment response was not JSON: ", m)),
+        match jv.parse(redact(j, body_text(r))) {
+          Err(m) => Err(str.concat("judgment response was not JSON: ", m.message)),
           Ok(body) => Ok(answers_of(body, questions)),
         }
       },

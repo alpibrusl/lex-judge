@@ -12,7 +12,7 @@ import "std.list" as list
 
 import "std.io" as io
 
-import "std.json" as json
+import "lex-schema/json_value" as jv
 
 import "../src/judge" as judge
 
@@ -24,8 +24,8 @@ fn expect(cond :: Bool, msg :: Str) -> Result[Unit, Str] {
   }
 }
 
-fn parse(s :: Str) -> Json {
-  match json.decode(s) {
+fn parse(s :: Str) -> jv.Json {
+  match jv.parse(s) {
     Err(_) => JNull,
     Ok(j) => j,
   }
@@ -47,7 +47,7 @@ fn close(a :: Float, b :: Float) -> Bool {
 # that order.
 fn noul_encodes_to_the_documented_shape() -> Result[Unit, Str] {
   let j := judge.question_json(JudgeNoul("Does the customer request a refund?"))
-  let s := json.encode(j)
+  let s := jv.stringify(j)
   if not str.contains(s, "\"type\":\"noul\"") {
     Err(str.concat("missing type: ", s))
   } else {
@@ -57,7 +57,7 @@ fn noul_encodes_to_the_documented_shape() -> Result[Unit, Str] {
 
 fn choice_encodes_its_options_as_an_object() -> Result[Unit, Str] {
   let j := judge.question_json(JudgeChoice("Which team?", [("billing", "Payment issues"), ("technical", "Bugs")]))
-  let s := json.encode(j)
+  let s := jv.stringify(j)
   if not str.contains(s, "\"type\":\"choice\"") {
     Err(str.concat("type: ", s))
   } else {
@@ -69,13 +69,13 @@ fn choice_encodes_its_options_as_an_object() -> Result[Unit, Str] {
 # encode as an array. An object would be a silent reordering hazard.
 fn score_encodes_its_levels_as_an_ordered_array() -> Result[Unit, Str] {
   let j := judge.question_json(JudgeScore("How frustrated?", ["Calm", "Concerned", "Angry"]))
-  let s := json.encode(j)
+  let s := jv.stringify(j)
   expect(str.contains(s, "[\"Calm\",\"Concerned\",\"Angry\"]"), str.concat("levels must stay ordered: ", s))
 }
 
 fn a_request_carries_state_model_and_questions() -> Result[Unit, Str] {
   let j := judge.request_json(judge.make("k"), "the state", [("q1", JudgeNoul("yes?"))])
-  let s := json.encode(j)
+  let s := jv.stringify(j)
   if not str.contains(s, "\"model\":\"jev-latest\"") {
     Err(str.concat("model: ", s))
   } else {
@@ -238,7 +238,7 @@ fn run_all() -> [io] Unit {
       },
     }
   })
-  let __s := io.print(str.join(["lex-judge: ", json.encode(JInt(list.len(results) - failures)), "/", json.encode(JInt(list.len(results))), " passed"], ""))
+  let __s := io.print(str.join(["lex-judge: ", jv.stringify(JInt(list.len(results) - failures)), "/", jv.stringify(JInt(list.len(results))), " passed"], ""))
   if failures == 0 {
     ()
   } else {
