@@ -59,3 +59,10 @@ fn answer_of(id :: Str, j :: Json) -> Answer {
     _ => JudgeMissing(id),
   }
 }
+
+fn body_text(r :: HttpResponse) -> Str {
+  match bytes.to_str(r.body) {
+    Err(_) => "",
+    Ok(t) => t,
+  }
+}
