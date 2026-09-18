@@ -134,6 +134,8 @@ fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Re
   }
 }
 
+type Answer = JudgeChoiceAnswer((Str, List[(Str, Float)], Float)) | JudgeMissing(Str) | JudgeNoulAnswer(Float) | JudgeScoreAnswer((Float, List[Float], Float))
+
 fn request_json(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> Json {
   JObj([("state", JStr(state)), ("model", JStr(j.model)), ("questions", JObj(list.map(questions, fn (q :: (Str, Question)) -> (Str, Json) {
     match q {
