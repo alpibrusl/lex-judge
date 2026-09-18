@@ -67,6 +67,23 @@ fn answer_of(id :: Str, j :: Json) -> Answer {
   }
 }
 
+fn field(j :: Json, name :: Str) -> Option[Json] {
+  match j {
+    JObj(kvs) => list.fold(kvs, None, fn (acc :: Option[Json], kv :: (Str, Json)) -> Option[Json] {
+      match acc {
+        Some(v) => Some(v),
+        None => match kv {
+          (k, v) => match (k == name) {
+            true => Some(v),
+            false => None,
+          },
+        },
+      }
+    }),
+    _ => None,
+  }
+}
+
 fn decided(a :: Answer, min_confidence :: Float) -> Bool {
   match a {
     JudgeNoulAnswer(p) => match (p >= 0.5) {
