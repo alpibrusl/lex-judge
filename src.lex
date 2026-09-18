@@ -50,6 +50,13 @@ fn lookup(answers :: List[(Str, Answer)], id :: Str) -> Answer {
   })
 }
 
+fn num_at(j :: Json, name :: Str) -> Float {
+  match field(j, name) {
+    None => 0.0,
+    Some(v) => num(v),
+  }
+}
+
 fn int_as_float(i :: Int) -> Float {
   match json.decode(str.concat(int_str(i), ".0")) {
     Ok(JFloat(f)) => f,
