@@ -61,6 +61,14 @@ fn int_str(i :: Int) -> Str {
   json.encode(JInt(i))
 }
 
+fn num(j :: Json) -> Float {
+  match j {
+    JFloat(f) => f,
+    JInt(i) => int_as_float(i),
+    _ => 0.0,
+  }
+}
+
 fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Result[List[(Str, Answer)], Str] {
   match list.is_empty(questions) {
     true => Ok([]),
