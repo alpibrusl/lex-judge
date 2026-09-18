@@ -57,6 +57,13 @@ fn lookup(answers :: List[(Str, Answer)], id :: Str) -> Answer {
   })
 }
 
+fn str_at(j :: Json, name :: Str) -> Str {
+  match field(j, name) {
+    Some(JStr(s)) => s,
+    _ => "",
+  }
+}
+
 fn num_at(j :: Json, name :: Str) -> Float {
   match field(j, name) {
     None => 0.0,
