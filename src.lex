@@ -45,6 +45,13 @@ fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Re
   }
 }
 
+fn chosen(a :: Answer) -> Str {
+  match a {
+    JudgeChoiceAnswer(k, _, _) => k,
+    _ => "",
+  }
+}
+
 fn answer_of(id :: Str, j :: Json) -> Answer {
   match str_at(j, "type") {
     "noul" => JudgeNoulAnswer(num_at(j, "noul")),
