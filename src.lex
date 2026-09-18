@@ -25,6 +25,20 @@ fn answers_of(body :: Json, questions :: List[(Str, Question)]) -> List[(Str, An
   })
 }
 
+fn lookup(answers :: List[(Str, Answer)], id :: Str) -> Answer {
+  list.fold(answers, JudgeMissing(id), fn (acc :: Answer, a :: (Str, Answer)) -> Answer {
+    match acc {
+      JudgeMissing(_) => match a {
+        (k, v) => match (k == id) {
+          true => v,
+          false => acc,
+        },
+      },
+      _ => acc,
+    }
+  })
+}
+
 fn int_as_float(i :: Int) -> Float {
   match json.decode(str.concat(int_str(i), ".0")) {
     Ok(JFloat(f)) => f,
