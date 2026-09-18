@@ -57,6 +57,22 @@ fn num_at(j :: Json, name :: Str) -> Float {
   }
 }
 
+fn prob_pairs(j :: Json) -> List[(Str, Float)] {
+  match j {
+    JObj(kvs) => list.map(kvs, fn (kv :: (Str, Json)) -> (Str, Float) {
+      match kv {
+        (k, v) => (k, num(v)),
+      }
+    }),
+    JList(xs) => list.map(list.enumerate(xs), fn (p :: (Int, Json)) -> (Str, Float) {
+      match p {
+        (i, v) => (int_str(i), num(v)),
+      }
+    }),
+    _ => [],
+  }
+}
+
 fn int_as_float(i :: Int) -> Float {
   match json.decode(str.concat(int_str(i), ".0")) {
     Ok(JFloat(f)) => f,
