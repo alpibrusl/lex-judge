@@ -10,6 +10,13 @@ import "std.map" as map
 
 import "std.str" as str
 
+fn noul_p(a :: Answer) -> Float {
+  match a {
+    JudgeNoulAnswer(p) => p,
+    _ => 0.5,
+  }
+}
+
 fn make(api_key :: Str) -> Judge {
   { api_key: api_key, base_url: "https://api.typesafe.ai", model: "jev-latest", timeout_ms: 30000 }
 }
