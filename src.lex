@@ -92,6 +92,14 @@ fn num(j :: Json) -> Float {
   }
 }
 
+fn prob_values(j :: Json) -> List[Float] {
+  list.map(prob_pairs(j), fn (p :: (Str, Float)) -> Float {
+    match p {
+      (_, v) => v,
+    }
+  })
+}
+
 fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Result[List[(Str, Answer)], Str] {
   match list.is_empty(questions) {
     true => Ok([]),
