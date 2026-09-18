@@ -171,6 +171,13 @@ fn question_json(q :: Question) -> Json {
   }
 }
 
+fn score_of(a :: Answer) -> Float {
+  match a {
+    JudgeScoreAnswer(s, _, _) => s,
+    _ => 0.0,
+  }
+}
+
 fn field(j :: Json, name :: Str) -> Option[Json] {
   match j {
     JObj(kvs) => list.fold(kvs, None, fn (acc :: Option[Json], kv :: (Str, Json)) -> Option[Json] {
