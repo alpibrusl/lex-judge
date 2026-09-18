@@ -67,6 +67,18 @@ fn answer_of(id :: Str, j :: Json) -> Answer {
   }
 }
 
+fn decided(a :: Answer, min_confidence :: Float) -> Bool {
+  match a {
+    JudgeNoulAnswer(p) => match (p >= 0.5) {
+      true => ((p - 0.5) >= (min_confidence / 2.0)),
+      false => ((0.5 - p) >= (min_confidence / 2.0)),
+    },
+    JudgeChoiceAnswer(_, _, c) => (c >= min_confidence),
+    JudgeScoreAnswer(_, _, c) => (c >= min_confidence),
+    JudgeMissing(_) => false,
+  }
+}
+
 fn body_text(r :: HttpResponse) -> Str {
   match bytes.to_str(r.body) {
     Err(_) => "",
