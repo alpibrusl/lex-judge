@@ -25,6 +25,13 @@ fn answers_of(body :: Json, questions :: List[(Str, Question)]) -> List[(Str, An
   })
 }
 
+fn int_as_float(i :: Int) -> Float {
+  match json.decode(str.concat(int_str(i), ".0")) {
+    Ok(JFloat(f)) => f,
+    _ => 0.0,
+  }
+}
+
 fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Result[List[(Str, Answer)], Str] {
   match list.is_empty(questions) {
     true => Ok([]),
