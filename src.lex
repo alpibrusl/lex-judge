@@ -87,6 +87,8 @@ fn prob_pairs(j :: Json) -> List[(Str, Float)] {
   }
 }
 
+type Judge = { api_key :: Str, base_url :: Str, model :: Str, timeout_ms :: Int }
+
 fn int_as_float(i :: Int) -> Float {
   match json.decode(str.concat(int_str(i), ".0")) {
     Ok(JFloat(f)) => f,
