@@ -142,6 +142,20 @@ fn answer_of(id :: Str, j :: Json) -> Answer {
   }
 }
 
+fn question_json(q :: Question) -> Json {
+  match q {
+    JudgeNoul(instructions) => JObj([("type", JStr("noul")), ("instructions", JStr(instructions))]),
+    JudgeChoice(instructions, options) => JObj([("type", JStr("choice")), ("instructions", JStr(instructions)), ("criteria", JObj(list.map(options, fn (o :: (Str, Str)) -> (Str, Json) {
+      match o {
+        (k, description) => (k, JStr(description)),
+      }
+    })))]),
+    JudgeScore(instructions, levels) => JObj([("type", JStr("score")), ("instructions", JStr(instructions)), ("criteria", JList(list.map(levels, fn (l :: Str) -> Json {
+      JStr(l)
+    })))]),
+  }
+}
+
 fn field(j :: Json, name :: Str) -> Option[Json] {
   match j {
     JObj(kvs) => list.fold(kvs, None, fn (acc :: Option[Json], kv :: (Str, Json)) -> Option[Json] {
