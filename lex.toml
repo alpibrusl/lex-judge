@@ -5,5 +5,10 @@ lex         = "0.11.35"
 description = "Typed judgments from a System One model, as a [net]-only Lex effect. Code owns the workflow; the model answers one narrow question at a time."
 license     = "EUPL-1.2"
 
-# No dependencies. `std.http` and `std.json` are all this needs, and a package
-# whose whole claim is a small auditable surface should not acquire more.
+[dependencies]
+# For its `Json`, not for its parser. Lex shares one constructor namespace, so
+# a package using the BUILTIN Json cannot be imported alongside json_value —
+# and json_value is what most of this ecosystem already uses. Compatibility is
+# worth one dependency; being unimportable is not a smaller surface, it is no
+# surface at all.
+lex-schema = { git = "https://github.com/alpibrusl/lex-schema" }

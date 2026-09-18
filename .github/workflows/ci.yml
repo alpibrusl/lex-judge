@@ -33,6 +33,9 @@ jobs:
           sudo install -m 0755 "lex-${LEX_VERSION}-${TARGET}/lex" /usr/local/bin/lex
           lex --version
 
+      - name: Install package dependencies
+        run: lex pkg install
+
       - name: Toolchain matches lex.toml
         run: |
           set -e
@@ -53,7 +56,9 @@ jobs:
       # needs a real API key, and a CI job that calls a paid third-party service
       # on every push is a bill and a flake, not a test.
       - name: Tests
-        run: lex run --allow-effects io,net tests/test_judge.lex run_all
+        run: |
+          lex run --allow-effects io,net tests/test_judge.lex run_all
+          lex run --allow-effects io,net tests/test_coexists.lex run_all
 
       # The claim this package makes is its effect row. A row that quietly
       # grows `io`, `fs_read` or `proc` would be a different package wearing
