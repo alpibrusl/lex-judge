@@ -1,0 +1,9 @@
+[package]
+name        = "lex-judge"
+version     = "0.1.0"
+lex         = "0.11.35"
+description = "Typed judgments from a System One model, as a [net]-only Lex effect. Code owns the workflow; the model answers one narrow question at a time."
+license     = "EUPL-1.2"
+
+# No dependencies. `std.http` and `std.json` are all this needs, and a package
+# whose whole claim is a small auditable surface should not acquire more.

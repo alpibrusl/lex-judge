@@ -1,0 +1,2 @@
+# The op-log store is local state, rebuilt by `lex op pull`.
+.lex/
