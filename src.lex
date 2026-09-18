@@ -21,6 +21,13 @@ fn make(api_key :: Str) -> Judge {
   { api_key: api_key, base_url: "https://api.typesafe.ai", model: "jev-latest", timeout_ms: 30000 }
 }
 
+fn redact(j :: Judge, s :: Str) -> Str {
+  match str.is_empty(j.api_key) {
+    true => s,
+    false => str.replace(s, j.api_key, "[redacted]"),
+  }
+}
+
 fn answers_of(body :: Json, questions :: List[(Str, Question)]) -> List[(Str, Answer)] {
   let answers := match field(body, "answers") {
     None => JObj([]),
