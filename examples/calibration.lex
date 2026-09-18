@@ -32,6 +32,10 @@ import "std.str" as str
 
 import "std.list" as list
 
+import "std.int" as int
+
+import "std.float" as float
+
 import "std.io" as io
 
 import "std.env" as env
@@ -56,46 +60,30 @@ type Scored = { p :: Float, label :: Bool, text :: Str }
 # (0.07374999999999998), which overruns the column and makes a table unreadable
 # — and an unreadable calibration table is a calibration table nobody checks.
 fn num_str(f :: Float) -> Str {
-  jv.stringify(JFloat(round3(f)))
+  float.to_str(round3(f))
 }
 
 fn round3(f :: Float) -> Float {
-  int_to_float(float_floor(f * 1000.0 + 0.5)) / 1000.0
-}
-
-fn int_str(i :: Int) -> Str {
-  jv.stringify(JInt(i))
-}
-
-fn field(j :: jv.Json, name :: Str) -> Option[jv.Json] {
-  match j {
-    JObj(kvs) => list.fold(kvs, None, fn (acc :: Option[jv.Json], kv :: (Str, jv.Json)) -> Option[jv.Json] {
-      match acc {
-        Some(v) => Some(v),
-        None => match kv {
-          (k, v) => if k == name {
-            Some(v)
-          } else {
-            None
-          },
-        },
-      }
-    }),
-    _ => None,
-  }
+  int.to_float(float.to_int(f * 1000.0 + 0.5)) / 1000.0
 }
 
 fn text_of(j :: jv.Json) -> Str {
-  match field(j, "text") {
-    Some(JStr(s)) => s,
-    _ => "",
+  match jv.get_field(j, "text") {
+    None => "",
+    Some(v) => match jv.as_str(v) {
+      Some(t) => t,
+      None => "",
+    },
   }
 }
 
 fn label_of(j :: jv.Json) -> Bool {
-  match field(j, "label") {
-    Some(JBool(b)) => b,
-    _ => false,
+  match jv.get_field(j, "label") {
+    None => false,
+    Some(v) => match jv.as_bool(v) {
+      Some(b) => b,
+      None => false,
+    },
   }
 }
 
@@ -137,7 +125,7 @@ fn take(xs :: List[Str], k :: Int) -> List[Str] {
 # finding, and a table with rows quietly missing invites reading a gap as
 # agreement.
 fn bin_of(p :: Float) -> Int {
-  let b := float_floor(p * 10.0)
+  let b := float.to_int(p * 10.0)
   if b > 9 {
     9
   } else {
@@ -146,24 +134,6 @@ fn bin_of(p :: Float) -> Int {
     } else {
       b
     }
-  }
-}
-
-fn float_floor(f :: Float) -> Int {
-  match jv.parse(str.concat(int_part(f), "")) {
-    Ok(JInt(i)) => i,
-    _ => 0,
-  }
-}
-
-# `json.encode` renders a Float with a decimal point; the integer part is
-# everything before it. Crude, and adequate: the values here are probabilities
-# in [0,1] scaled by ten, so the magnitudes are tiny and well-behaved.
-fn int_part(f :: Float) -> Str {
-  let s := jv.stringify(JFloat(f))
-  match str.find(s, ".", 0) {
-    None => s,
-    Some(i) => str.slice(s, 0, i),
   }
 }
 
@@ -179,7 +149,7 @@ fn mean_p(rows :: List[Scored]) -> Float {
   } else {
     list.fold(rows, 0.0, fn (acc :: Float, r :: Scored) -> Float {
       acc + r.p
-    }) / int_to_float(list.len(rows))
+    }) / int.to_float(list.len(rows))
   }
 }
 
@@ -187,16 +157,9 @@ fn observed(rows :: List[Scored]) -> Float {
   if list.is_empty(rows) {
     0.0
   } else {
-    int_to_float(list.len(list.filter(rows, fn (r :: Scored) -> Bool {
+    int.to_float(list.len(list.filter(rows, fn (r :: Scored) -> Bool {
       r.label
-    }))) / int_to_float(list.len(rows))
-  }
-}
-
-fn int_to_float(i :: Int) -> Float {
-  match jv.parse(str.concat(int_str(i), ".0")) {
-    Ok(JFloat(f)) => f,
-    _ => 0.0,
+    }))) / int.to_float(list.len(rows))
   }
 }
 
@@ -222,7 +185,7 @@ fn brier(rows :: List[Scored]) -> Float {
         0.0
       }
       acc + (r.p - truth) * (r.p - truth)
-    }) / int_to_float(list.len(rows))
+    }) / int.to_float(list.len(rows))
   }
 }
 
@@ -230,7 +193,7 @@ fn brier(rows :: List[Scored]) -> Float {
 # was predicted and what happened. This is the number that says whether a
 # threshold in code means anything.
 fn ece(rows :: List[Scored]) -> Float {
-  let n := int_to_float(list.len(rows))
+  let n := int.to_float(list.len(rows))
   if list.is_empty(rows) {
     0.0
   } else {
@@ -239,7 +202,7 @@ fn ece(rows :: List[Scored]) -> Float {
       if list.is_empty(bucket) {
         acc
       } else {
-        acc + int_to_float(list.len(bucket)) / n * abs_f(mean_p(bucket) - observed(bucket))
+        acc + int.to_float(list.len(bucket)) / n * abs_f(mean_p(bucket) - observed(bucket))
       }
     })
   }
@@ -255,11 +218,11 @@ fn pad(s :: Str, width :: Int) -> Str {
 
 fn report_bin(rows :: List[Scored], b :: Int) -> [io] Unit {
   let bucket := in_bin(rows, b)
-  let lo := int_to_float(b) / 10.0
+  let lo := int.to_float(b) / 10.0
   if list.is_empty(bucket) {
     io.print(str.join(["  ", pad(num_str(lo), 6), pad("-", 8), pad("", 10), "—"], ""))
   } else {
-    io.print(str.join(["  ", pad(num_str(lo), 6), pad(int_str(list.len(bucket)), 8), pad(num_str(mean_p(bucket)), 10), num_str(observed(bucket))], ""))
+    io.print(str.join(["  ", pad(num_str(lo), 6), pad(int.to_str(list.len(bucket)), 8), pad(num_str(mean_p(bucket)), 10), num_str(observed(bucket))], ""))
   }
 }
 
@@ -289,7 +252,7 @@ fn go(path :: Str, limit :: Str) -> [env, fs_read, io, net] Unit {
           not str.is_empty(str.trim(l))
         }), k)
         let j := judge.make(key)
-        let __a := io.print(str.join(["scoring ", int_str(list.len(lines)), " item(s), one call each…"], ""))
+        let __a := io.print(str.join(["scoring ", int.to_str(list.len(lines)), " item(s), one call each…"], ""))
         let rows := list.fold(lines, [], fn (acc :: List[Scored], line :: Str) -> [net] List[Scored] {
           match score_one(j, line) {
             None => acc,
@@ -299,7 +262,7 @@ fn go(path :: Str, limit :: Str) -> [env, fs_read, io, net] Unit {
         let pos := list.len(list.filter(rows, fn (r :: Scored) -> Bool {
           r.label
         }))
-        let __b := io.print(str.join(["scored ", int_str(list.len(rows)), " of ", int_str(list.len(lines)), "   positives: ", int_str(pos), "   negatives: ", int_str(list.len(rows) - pos)], ""))
+        let __b := io.print(str.join(["scored ", int.to_str(list.len(rows)), " of ", int.to_str(list.len(lines)), "   positives: ", int.to_str(pos), "   negatives: ", int.to_str(list.len(rows) - pos)], ""))
         let __c := io.print("")
         let __d := io.print(str.join(["  ", pad("bin", 6), pad("n", 8), pad("mean p", 10), "observed"], ""))
         let __e := list.fold(list.range(0, 10), 0, fn (n :: Int, b :: Int) -> [io] Int {
@@ -325,7 +288,7 @@ fn go(path :: Str, limit :: Str) -> [env, fs_read, io, net] Unit {
         let __p4 := if list.is_empty(fps) {
           io.print("  no negative scored above 0.5 — no false positives at that threshold")
         } else {
-          let __y := io.print(str.join(["  negatives scored above 0.5 (false positives): ", int_str(list.len(fps))], ""))
+          let __y := io.print(str.join(["  negatives scored above 0.5 (false positives): ", int.to_str(list.len(fps))], ""))
           let __z := list.fold(fps, 0, fn (n :: Int, r :: Scored) -> [io] Int {
             let __w := io.print(str.join(["    p=", pad(num_str(r.p), 8), str.slice(str.trim(r.text), 0, 68)], ""))
             n + 1
@@ -339,7 +302,7 @@ fn go(path :: Str, limit :: Str) -> [env, fs_read, io, net] Unit {
           io.print("\n  WARNING: no positives in this sample — ECE here is just the mean prediction, not calibration. Score more items.")
         } else {
           if pos < 10 {
-            io.print(str.join(["\n  NOTE: only ", int_str(pos), " positive(s) — the upper bins are too sparse to read as calibration."], ""))
+            io.print(str.join(["\n  NOTE: only ", int.to_str(pos), " positive(s) — the upper bins are too sparse to read as calibration."], ""))
           } else {
             ()
           }

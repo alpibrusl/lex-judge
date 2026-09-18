@@ -27,6 +27,10 @@ import "std.str" as str
 
 import "std.list" as list
 
+import "std.int" as int
+
+import "std.float" as float
+
 import "std.map" as map
 
 import "std.http" as http
@@ -108,26 +112,24 @@ fn request_json(j :: Judge, state :: Str, questions :: List[(Str, Question)]) ->
   })))])
 }
 
-# ── decoding ─────────────────────────────────────────────────────────────────
-# Numbers arrive as either JSON form. A probability of exactly 1 is an Int on
-# the wire, so reading only JFloat would silently turn certainty into zero.
+# ── decoding ────────────────────────────────────────────────────────────────
+#
+# Everything below leans on json_value's own accessors — `get_field`, `as_str`,
+# `as_int`, `as_float`, `as_obj`, `as_list` — rather than matching constructors
+# by hand. An earlier version of this file reimplemented all of them, including
+# an Int-to-Float conversion that serialised to JSON text and reparsed it when
+# `int.to_float` exists. Reimplementing a library's accessors inside a consumer
+# of that library is how two decoders drift apart.
+# A number from either JSON form. A probability of exactly 1 arrives as an Int,
+# so reading only floats would decode certainty as 0.0 and invert the answer.
 fn num(j :: jv.Json) -> Float {
-  match j {
-    JFloat(f) => f,
-    JInt(i) => int_as_float(i),
-    _ => 0.0,
+  match jv.as_float(j) {
+    Some(f) => f,
+    None => match jv.as_int(j) {
+      Some(i) => int.to_float(i),
+      None => 0.0,
+    },
   }
-}
-
-fn int_as_float(i :: Int) -> Float {
-  match jv.parse(str.concat(int_str(i), ".0")) {
-    Ok(JFloat(f)) => f,
-    _ => 0.0,
-  }
-}
-
-fn int_str(i :: Int) -> Str {
-  jv.stringify(JInt(i))
 }
 
 fn num_at(j :: jv.Json, name :: Str) -> Float {
@@ -139,29 +141,34 @@ fn num_at(j :: jv.Json, name :: Str) -> Float {
 
 fn str_at(j :: jv.Json, name :: Str) -> Str {
   match jv.get_field(j, name) {
-    Some(JStr(s)) => s,
-    _ => "",
+    None => "",
+    Some(v) => match jv.as_str(v) {
+      Some(t) => t,
+      None => "",
+    },
   }
 }
 
 # `probabilities` is documented as an OBJECT keyed by option in the API
-# reference and as an ARRAY in the primitives page. Both are accepted rather
-# than guessed at, because a decoder that picks one and is wrong returns an
-# empty distribution instead of failing, and an empty distribution reads as a
-# confident zero.
+# reference and as an ARRAY in the primitives page. The wire sends an object —
+# but both are accepted, because a decoder that picks one and is wrong returns
+# an empty distribution rather than failing, and an empty distribution reads
+# downstream as a confident zero.
 fn prob_pairs(j :: jv.Json) -> List[(Str, Float)] {
-  match j {
-    JObj(kvs) => list.map(kvs, fn (kv :: (Str, jv.Json)) -> (Str, Float) {
+  match jv.as_obj(j) {
+    Some(kvs) => list.map(kvs, fn (kv :: (Str, jv.Json)) -> (Str, Float) {
       match kv {
         (k, v) => (k, num(v)),
       }
     }),
-    JList(xs) => list.map(list.enumerate(xs), fn (p :: (Int, jv.Json)) -> (Str, Float) {
-      match p {
-        (i, v) => (int_str(i), num(v)),
-      }
-    }),
-    _ => [],
+    None => match jv.as_list(j) {
+      Some(xs) => list.map(list.enumerate(xs), fn (p :: (Int, jv.Json)) -> (Str, Float) {
+        match p {
+          (i, v) => (int.to_str(i), num(v)),
+        }
+      }),
+      None => [],
+    },
   }
 }
 
@@ -240,7 +247,7 @@ fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Re
     match http.send(req) {
       Err(_) => Err(str.concat("could not reach ", j.base_url)),
       Ok(r) => if r.status >= 400 {
-        Err(str.join(["judgment request returned HTTP ", int_str(r.status), ": ", str.slice(redact(j, body_text(r)), 0, 300)], ""))
+        Err(str.join(["judgment request returned HTTP ", int.to_str(r.status), ": ", str.slice(redact(j, body_text(r)), 0, 300)], ""))
       } else {
         match jv.parse(redact(j, body_text(r))) {
           Err(m) => Err(str.concat("judgment response was not JSON: ", m.message)),

@@ -15,6 +15,10 @@ import "std.str" as str
 
 import "std.list" as list
 
+import "std.int" as int
+
+import "std.float" as float
+
 import "std.io" as io
 
 import "std.env" as env
@@ -23,23 +27,19 @@ import "lex-schema/json_value" as jv
 
 import "../src/judge" as judge
 
-fn num_str(f :: Float) -> Str {
-  jv.stringify(JFloat(f))
-}
-
 fn show(id :: Str, a :: judge.Answer) -> [io] Unit {
   match a {
-    JudgeNoulAnswer(p) => io.print(str.join(["  ", id, "  noul   p=", num_str(p), "   decided@0.8=", if judge.decided(a, 0.8) {
+    JudgeNoulAnswer(p) => io.print(str.join(["  ", id, "  noul   p=", float.to_str(p), "   decided@0.8=", if judge.decided(a, 0.8) {
       "yes"
     } else {
       "no"
     }], "")),
-    JudgeChoiceAnswer(k, probs, c) => io.print(str.join(["  ", id, "  choice ", k, "   confidence=", num_str(c), "   options=", jv.stringify(JInt(list.len(probs))), "   decided@0.8=", if judge.decided(a, 0.8) {
+    JudgeChoiceAnswer(k, probs, c) => io.print(str.join(["  ", id, "  choice ", k, "   confidence=", float.to_str(c), "   options=", int.to_str(list.len(probs)), "   decided@0.8=", if judge.decided(a, 0.8) {
       "yes"
     } else {
       "no"
     }], "")),
-    JudgeScoreAnswer(s, probs, c) => io.print(str.join(["  ", id, "  score  ", num_str(s), "   confidence=", num_str(c), "   levels=", jv.stringify(JInt(list.len(probs)))], "")),
+    JudgeScoreAnswer(s, probs, c) => io.print(str.join(["  ", id, "  score  ", float.to_str(s), "   confidence=", float.to_str(c), "   levels=", int.to_str(list.len(probs))], "")),
     JudgeMissing(m) => io.print(str.join(["  ", id, "  MISSING (", m, ") — the server sent a shape this decoder does not know"], "")),
   }
 }
