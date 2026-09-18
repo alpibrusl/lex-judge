@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# `vcs-mirror` is a derived, force-updated render of the op-log. Running CI on
+# it would gate a branch nobody edits, on commits that are re-derived each time
+# the mirror runs.
+
+env:
+  # Must match `lex` in lex.toml. They drift independently, and when they do,
+  # a local `lex ci` passes while CI type-checks against a toolchain missing
+  # the builtins the package needs — which is exactly how a green local run
+  # hid a broken build in a sibling repo.
+  LEX_VERSION: v0.11.35
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lex toolchain (pre-built binary)
+        run: |
+          set -e
+          TARGET=x86_64-unknown-linux-gnu
+          URL="https://github.com/alpibrusl/lex-lang/releases/download/${LEX_VERSION}/lex-${LEX_VERSION}-${TARGET}.tar.gz"
+          curl -sSfL "$URL" -o lex.tar.gz
+          tar -xzf lex.tar.gz
+          sudo install -m 0755 "lex-${LEX_VERSION}-${TARGET}/lex" /usr/local/bin/lex
+          lex --version
+
+      - name: Toolchain matches lex.toml
+        run: |
+          set -e
+          DECLARED=$(grep -oE '^lex[[:space:]]*=[[:space:]]*"[^"]+"' lex.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          PINNED=${LEX_VERSION#v}
+          echo "lex.toml declares $DECLARED; workflow installs $PINNED"
+          [ "$DECLARED" = "$PINNED" ] || { echo "::error::lex.toml and LEX_VERSION disagree"; exit 1; }
+
+      - name: Type-check (strict)
+        run: |
+          set -e
+          for f in src/*.lex tests/*.lex examples/*.lex; do lex check --strict "$f"; done
+
+      - name: Format check
+        run: lex fmt --check src/ tests/ examples/
+
+      # `examples/live_check.lex` is type-checked above but never RUN here: it
+      # needs a real API key, and a CI job that calls a paid third-party service
+      # on every push is a bill and a flake, not a test.
+      - name: Tests
+        run: lex run --allow-effects io,net tests/test_judge.lex run_all
+
+      # The claim this package makes is its effect row. A row that quietly
+      # grows `io`, `fs_read` or `proc` would be a different package wearing
+      # the same name, so CI asserts it rather than trusting the README.
+      - name: The row is [net] and nothing else
+        run: |
+          set -e
+          ROW=$(lex check src/judge.lex | sed -n 's/^required effects: //p')
+          echo "declared row: $ROW"
+          [ "$ROW" = "net" ] || { echo "::error::src/judge.lex must require exactly [net], got [$ROW]"; exit 1; }
