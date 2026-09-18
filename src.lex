@@ -127,6 +127,14 @@ fn ask(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> [net] Re
   }
 }
 
+fn request_json(j :: Judge, state :: Str, questions :: List[(Str, Question)]) -> Json {
+  JObj([("state", JStr(state)), ("model", JStr(j.model)), ("questions", JObj(list.map(questions, fn (q :: (Str, Question)) -> (Str, Json) {
+    match q {
+      (id, question) => (id, question_json(question)),
+    }
+  })))])
+}
+
 fn chosen(a :: Answer) -> Str {
   match a {
     JudgeChoiceAnswer(k, _, _) => k,
